@@ -1,11 +1,99 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Malawi Graph optimization</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Malawi Graph - Raw Layout</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 20px;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 80px;
+      margin-bottom: 20px;
+    }
+    h2 {
+      margin: 0;
+    }
+    button#optimizeBtn {
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: default; 
+      transition: background-color 0.3s ease;
+    }
+    button#optimizeBtn:hover {
+      background-color: #45a049;
+    }
+    svg {
+      border: 1px solid #ccc;
+    }
+  </style>
 </head>
 <body>
-    
+  <header>
+    <h2>Malawi District Graph (Raw Layout)</h2>
+    <button id="optimizeBtn" disabled>Optimize</button>
+  </header>
+
+  <svg width="800" height="800"></svg>
+
+  <script>
+    const svg = d3.select("svg");
+    const width = +svg.attr("width");
+    const height = +svg.attr("height");
+    const padding = 40;
+
+    Promise.all([
+      fetch('raw_positions.json').then(res => res.json()),
+      fetch('data/raw_edges.json').then(res => res.json())
+    ]).then(([nodes, edges]) => {
+      // Scale coordinates to fit SVG
+      nodes.forEach(d => {
+        d.fx = padding + d.x * (width - 2 * padding);
+        d.fy = padding + d.y * (height - 2 * padding);
+      });
+
+      // Draw edges
+      svg.selectAll("line")
+        .data(edges)
+        .enter()
+        .append("line")
+        .attr("x1", d => nodes.find(n => n.id === d[0]).fx)
+        .attr("y1", d => nodes.find(n => n.id === d[0]).fy)
+        .attr("x2", d => nodes.find(n => n.id === d[1]).fx)
+        .attr("y2", d => nodes.find(n => n.id === d[1]).fy)
+        .attr("stroke", "#999");
+
+      // Draw nodes
+      svg.selectAll("circle")
+        .data(nodes)
+        .enter()
+        .append("circle")
+        .attr("cx", d => d.fx)
+        .attr("cy", d => d.fy)
+        .attr("r", 5)
+        .attr("fill", "#69b3a2");
+
+      // Labels
+      svg.selectAll("text")
+        .data(nodes)
+        .enter()
+        .append("text")
+        .attr("x", d => d.fx + 7)
+        .attr("y", d => d.fy + 4)
+        .text(d => d.id)
+        .attr("font-size", "10px")
+        .attr("fill", "#333");
+    }).catch(err => {
+      console.error("Error loading JSON:", err);
+    });
+  </script>
 </body>
 </html>
