@@ -1,0 +1,1 @@
+import { nodes, edges } from './data.js';
