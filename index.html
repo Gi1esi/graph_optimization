@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Malawi Graph - Raw Layout</title>
+  <title>Malawi Graph - Interactive Layout</title>
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <style>
     body {
@@ -25,7 +25,7 @@
       border: none;
       padding: 8px 16px;
       border-radius: 6px;
-      cursor: default; 
+      cursor: pointer;
       transition: background-color 0.3s ease;
     }
     button#optimizeBtn:hover {
@@ -39,7 +39,7 @@
 <body>
   <header>
     <h2>Malawi District Graph (Raw Layout)</h2>
-    <button id="optimizeBtn" disabled>Optimize</button>
+    <button id="optimizeBtn">Optimize</button>
   </header>
 
   <svg width="800" height="800"></svg>
@@ -48,19 +48,44 @@
     const svg = d3.select("svg");
     const width = +svg.attr("width");
     const height = +svg.attr("height");
-    const padding = 40;
+    const padding = 50;
 
-    Promise.all([
-      fetch('raw_positions.json').then(res => res.json()),
-      fetch('data/raw_edges.json').then(res => res.json())
-    ]).then(([nodes, edges]) => {
-      // Scale coordinates to fit SVG
+    let nodes = [];
+    let edges = [];
+
+    // Utility: Euclidean distance + EPS to avoid zero
+    const EPS = 1e-6;
+    function dist(a, b) {
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      return Math.sqrt(dx * dx + dy * dy) + EPS;
+    }
+
+    // Calculate and log metrics
+    function calculateMetrics(nodes, edges) {
+      let totalLength = 0;
+      for (const [sId, tId] of edges) {
+        const s = nodes.find(n => n.id === sId);
+        const t = nodes.find(n => n.id === tId);
+        totalLength += dist(s, t);
+      }
+      const avg = totalLength / edges.length;
+      console.log(`Average edge length: ${avg.toFixed(4)}`);
+      console.log(`Total edge length: ${totalLength.toFixed(4)}`);
+      return { averageEdgeLength: avg, totalEdgeLength: totalLength };
+    }
+
+    // Draw graph function: clears and redraws edges, nodes, labels
+    function drawGraph(nodes, edges) {
+      svg.selectAll("*").remove();
+
+      // Scale node positions to SVG coords
       nodes.forEach(d => {
         d.fx = padding + d.x * (width - 2 * padding);
         d.fy = padding + d.y * (height - 2 * padding);
       });
 
-      // Draw edges
+      // Edges
       svg.selectAll("line")
         .data(edges)
         .enter()
@@ -69,9 +94,10 @@
         .attr("y1", d => nodes.find(n => n.id === d[0]).fy)
         .attr("x2", d => nodes.find(n => n.id === d[1]).fx)
         .attr("y2", d => nodes.find(n => n.id === d[1]).fy)
-        .attr("stroke", "#999");
+        .attr("stroke", "#999")
+        .attr("stroke-width", 1);
 
-      // Draw nodes
+      // Nodes
       svg.selectAll("circle")
         .data(nodes)
         .enter()
@@ -91,8 +117,100 @@
         .text(d => d.id)
         .attr("font-size", "10px")
         .attr("fill", "#333");
+    }
+
+    // FR layout in-browser (same algorithm)
+    function layoutFR(nodes, edges, iterations=300) {
+      const k = Math.sqrt(1 / nodes.length);
+      let temperature = 0.1;
+      const nodeById = new Map(nodes.map(n => [n.id, n]));
+
+      for (let iter = 0; iter < iterations; iter++) {
+        const disp = new Map(nodes.map(n => [n.id, { dx: 0, dy: 0 }]));
+
+        // Repulsion
+        for (let i = 0; i < nodes.length; i++) {
+          for (let j = i + 1; j < nodes.length; j++) {
+            const n1 = nodes[i];
+            const n2 = nodes[j];
+            const d = dist(n1, n2);
+            const force = (k * k) / d;
+            const fx = ((n1.x - n2.x) / d) * force;
+            const fy = ((n1.y - n2.y) / d) * force;
+
+            disp.get(n1.id).dx += fx;
+            disp.get(n1.id).dy += fy;
+            disp.get(n2.id).dx -= fx;
+            disp.get(n2.id).dy -= fy;
+          }
+        }
+
+        // Attraction
+        for (const [sId, tId] of edges) {
+          const s = nodeById.get(sId);
+          const t = nodeById.get(tId);
+          const d = dist(s, t);
+          const force = (d * d) / k;
+          const fx = ((s.x - t.x) / d) * force;
+          const fy = ((s.y - t.y) / d) * force;
+
+          disp.get(s.id).dx -= fx;
+          disp.get(s.id).dy -= fy;
+          disp.get(t.id).dx += fx;
+          disp.get(t.id).dy += fy;
+        }
+
+        // Move nodes with temperature clamp
+        for (const n of nodes) {
+          const d = disp.get(n.id);
+          let dx = d.dx;
+          let dy = d.dy;
+          const len = Math.sqrt(dx * dx + dy * dy);
+          if (len > 0) {
+            dx = (dx / len) * Math.min(len, temperature);
+            dy = (dy / len) * Math.min(len, temperature);
+          }
+          n.x = Math.min(1, Math.max(0, n.x + dx));
+          n.y = Math.min(1, Math.max(0, n.y + dy));
+        }
+
+        temperature *= 0.95; // cooling
+      }
+    }
+
+    // Load raw data, draw raw graph first, enable optimize button
+    Promise.all([
+      fetch('data/raw_nodes.json').then(r => r.json()),
+      fetch('data/raw_edges.json').then(r => r.json())
+    ]).then(([rawNodes, rawEdges]) => {
+      nodes = rawNodes;
+      edges = rawEdges;
+
+      console.log("Raw graph metrics:");
+      calculateMetrics(nodes, edges);
+
+      drawGraph(nodes, edges);
+
+      // Enable button
+      const btn = document.getElementById('optimizeBtn');
+      btn.disabled = false;
+      btn.addEventListener('click', () => {
+        btn.disabled = true;
+        btn.textContent = "Optimizing...";
+
+        setTimeout(() => {
+          layoutFR(nodes, edges);
+          console.log("After optimization:");
+          calculateMetrics(nodes, edges);
+
+          drawGraph(nodes, edges);
+
+          btn.textContent = "Optimize";
+          btn.disabled = false;
+        }, 10); // slight delay to allow UI update
+      });
     }).catch(err => {
-      console.error("Error loading JSON:", err);
+      console.error("Failed to load data:", err);
     });
   </script>
 </body>
