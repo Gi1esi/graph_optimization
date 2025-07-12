@@ -4,8 +4,7 @@ This project visualizes and interactively optimizes the layout of a graph repres
 
 
 Project Structure
-
-
+ ```
 .
 ├── data/
 │   ├── raw_nodes.json
@@ -14,10 +13,10 @@ Project Structure
 ├── index.html               # Main visualization (interactive)
 ├── layout.js                # Optional: Node.js script for offline optimization/testing
 ├── optimized_positions.json # Optional: Output from layout.js
-├── raw_positions.json       # Optional: Raw coordinates (pretty printed from testinh)
+├── raw_positions.json       # Optional: Raw coordinates (pretty printed from testing)
 ├── README.md
 
-
+ ```
 Requirements
 
 - A static server to host `index.html` locally (e.g., `serve`)
